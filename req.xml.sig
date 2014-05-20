@@ -1,0 +1,3 @@
+----- BEGIN PKCS7 SIGNED -----
+КЛЮЧ......
+----- END PKCS7 SIGNED -----
