@@ -29,11 +29,20 @@
 #  
 
 
-from app.download import Download
+import os
+import app.download
 
+#  Settings:
+REQ_FILE_NAME = "req.xml" #  Файл запроса
+P7S_FILE_NAME = "req.xml.sig" #  Файл подписи запроса
+API_URL = "http://vigruzki.rkn.gov.ru/services/OperatorRequest/?wsdl" #  Ссылка выгрузки реестра запрещенных сайтов
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+VERSION_NUM = 2.0  # Версия выгрузки (2.0 - действует с 01.08.2014г.)
+REESTR_FILE = BASE_DIR + '/dump.xml' # Распакованный файл с реестром
+REESTR_ZIP = BASE_DIR + '/result.zip'
 
 def main():
-    Download()
+    app.download.Download()
     return 0
 
 

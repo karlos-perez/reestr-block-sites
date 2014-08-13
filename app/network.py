@@ -37,36 +37,38 @@ from base64 import b64encode
 from datetime import datetime
 from email.MIMEText import MIMEText
 
+import main
 
-#  Ссылка выгрузки реестра запрещенных сайтов
-API_URL = "http://vigruzki.rkn.gov.ru/services/OperatorRequest/?wsdl"
-#  отправитель
-FROM = 'server@exemple.com'
-#  получатель
-TO = 'user@exemple.com'
+# Настройки SMTP-сервера для уведомления
+FROM_EMAIL = 'server@exemple.com'  # с какой почты отправлять уведомление
+TO_EMAIL = 'user@exemple.com'  # кому отправлять уведомление
+SMTP_SERVER = 'mail.exemple.com'  # кому отправлять уведомление
+PORT = 25
+#USER_NAME = ' '
+#USER_PASS = ' '
 
 
 class Network:
     def send_request(self,requestFile,signatureFile):
-        '''
+        """
         Отправка запроса в РКН на выгрузку рееста.
         Отправляется файл запроса и файл подписи.
-        Возвращается результат запроса: запрос принят - код получен или 
-        запрос не принят - причины. 
-        '''
-        req_file = open(requestFile, "rb")
-        data = req_file.read()
-        req_file.close()
-        xml = b64encode(data)
-        sign_file = open(signatureFile, "rb")
-        data = sign_file.readlines()
-        sign_file.close()
+        Возвращается результат запроса: запрос принят - код получен или
+        запрос не принят - причины.
+        """
+        with open(requestFile, "rb") as req_file:
+            req_xml = req_file.read()
+        with open(signatureFile, "rb") as sign_file:
+            data = sign_file.readlines()
+        req = b64encode(req_xml)
         if '-----' in data[0]:
             sert = ''.join(data[1:-1])
         else:
-            sert = b64encode(sert)
-        client = suds.client.Client(API_URL)
-        result=client.service.sendRequest(xml,sert)
+            sert = ''.join(data)
+        sert = b64encode(sert)
+        client = suds.client.Client(main.API_URL)
+        result = client.service.sendRequest(req, sert, main.VERSION_NUM)
+
         return dict(((k, v.encode('utf-8')) \
                                     if isinstance(v, suds.sax.text.Text) \
                                     else (k, v)) for (k, v) in result)
@@ -76,33 +78,27 @@ class Network:
         '''
         Загрузка реестра по коду 
         '''
-        client = suds.client.Client(API_URL)
+        client = suds.client.Client(main.API_URL)
         result=client.service.getResult(code)
         return dict(((k, v.encode('utf-8')) \
-                                    if isinstance(v, suds.sax.text.Text) \
+                    if isinstance(v, suds.sax.text.Text) \
                                     else (k, v)) for (k, v) in result)
         
         
     def send_mail(self,message):
-        '''
+        """
         Отправка уведомления по почте о результатах выгрузки реестра.
-        '''
+        """
         Date = datetime.now()
         # текст письма
         text = message
         # заголовок письма
-        subj = 'Peecтр загружен %s' % Date.strftime('%Y%m%d-%H%M')
-        # SMTP-сервер
-        server = "mail.exemple.com"
-        port = 25
-        user_name = "server.exemple.com"
-        user_passwd = "password"
-        # формирование сообщения
+        subj = 'Выгрузка реестра %s' % Date.strftime('%Y%m%d-%H%M')
         msg = MIMEText(text, "", "utf-8")
         msg['Subject'] = subj
-        msg['From'] = FROM
-        msg['To'] = TO
+        msg['From'] = FROM_EMAIL
+        msg['To'] = TO_EMAIL
         # отправка
-        s = smtplib.SMTP(server, port)
-        s.sendmail(FROM, TO, msg.as_string())
+        s = smtplib.SMTP(SMTP_SERVER, PORT)
+        s.sendmail(FROM_EMAIL, TO_EMAIL, msg.as_string())
         s.quit()

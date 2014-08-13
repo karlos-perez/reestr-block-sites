@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-#  parse.py
+# parse.py
 #
 #  Copyright 2014 Alexei Krivtsov <kralole@gmail.com>
 #
@@ -28,116 +28,120 @@
 #
 #
 #  Модуль разбора скаченного xml файла реестра запрещенных сайтов
-#
+#  Версия выгрузки 2.0 (с 01.08.2014)
 
 
-from __future__ import with_statement
-from xml.dom.minidom import *
 import os
+import main
+from xml.dom.minidom import *
 
 
 #  Папка для сохранения списка ip адресов
-BLOCKIP_DIR = "./blockip/"
+BLOCKIP_DIR = main.BASE_DIR + "/blockip/"
 #  Папка для сохранения реестра
-REESTR_DIR = "./reestr/"
+REESTR_DIR = main.BASE_DIR + "/reestr/"
 #  Папка для сохранения файла с маршрутами для роутера
-ROUTEIP_DIR = "./blockrouteip/"
+ROUTEIP_DIR = main.BASE_DIR + "/blockrouteip/"
+
 
 
 class Parse:
-    def ParseAllXML(self):
-        '''
-        Конвертация разпакованного файл dump.xml
-        в файл csv для более легкого анализа в Exel или Calc
-        '''
-        xml_file = unicode('dump.xml')
-        xml = parse(xml_file)
-        updateTime = xml.getElementsByTagName('reg:register')[0] \
-                                           .getAttribute('updateTime').strip()
-        parse_file = REESTR_DIR + 'reestr_' + updateTime[0:10] + '_' + \
-                           updateTime[11:13] + '-' + updateTime[14:16] +'.csv'
-        out_file = open(parse_file, 'w')
-        out_file.truncate()
-        out_file.write(updateTime + '\n')
-        content = xml.getElementsByTagName('content')
+    def parse_dump_file(self):
+        with open(main.REESTR_FILE, 'r') as dump_file:
+            xml_file = parse(dump_file)
+        updateTime = xml_file.getElementsByTagName('reg:register')[0].getAttribute('updateTime').strip()
+        self.parse_all_xlm(updateTime, xml_file)
+        self.parse_ip_xml(updateTime, xml_file)
+
+    def parse_all_xlm(self, time, file_xml):
+        """
+        Преобразуем разпакованный файл dump.xml
+        в текстовый файл csv
+        """
+        parse_file_name = 'reestr_' + time[0:10] + '_' + time[11:13] + \
+                          '-' + time[14:16] + '.csv'
+        parse_file = os.path.join(REESTR_DIR, parse_file_name)
+        content = file_xml.getElementsByTagName('content')
+        result_list = []
         for node in content:
-            row = []
-            _id = node.getAttribute('id').strip()
-            row.append(_id)
-            _date = node.getElementsByTagName('decision')[0] \
-                                                 .getAttribute('date').strip()
-            row.append(_date)
-            _number = node.getElementsByTagName('decision')[0] \
-                                               .getAttribute('number').strip()
-            row.append(_number)
-            _org = node.getElementsByTagName('decision')[0] \
-                                                  .getAttribute('org').strip()
-            row.append(_org)
-            _url = node.getElementsByTagName('url')[0] \
-                                                      .firstChild.data.strip()
-            row.append(_url)
-            #  Проверяем указан домен или нет
+            node_list = []
+            node_list.append(node.getAttribute('id').strip())
+            node_list.append(node.getAttribute('includeTime').strip())
+            node_list.append(node.getAttribute('entryType').strip())
+            node_list.append(node.getElementsByTagName('decision')[0].getAttribute('org').strip())
+            node_list.append(node.getElementsByTagName('decision')[0].getAttribute('number').strip())
+            node_list.append(node.getElementsByTagName('decision')[0].getAttribute('date').strip())
             if node.getElementsByTagName('domain'):
-                _domain = node.getElementsByTagName('domain')[0] \
-                                                      .firstChild.data.strip()
-                row.append(_domain)
+                _domains = node.getElementsByTagName('domain')
+                for _domain in _domains:
+                    node_list.append((_domain.firstChild.data.strip()))
             else:
-                _domain = ' '
-                row.append(_domain)
-            #  Если указанно несколько IP адресов, то заносится только первый
-            _ip = node.getElementsByTagName('ip')[0].firstChild \
-                                                            .nodeValue.strip()
-            row.append(_ip)
-            row.append('\n')
-            data = ';'.join(row)
-            data = data.encode('cp1251')
-            out_file.write(data)
-        out_file.close()   
-        return parse_file    
+                node_list.append(" ")
+            if node.getElementsByTagName('url'):
+                _urls = node.getElementsByTagName('url')
+                for _url in _urls:
+                    node_list.append((_url.firstChild.data.strip()))
+            else:
+                node_list.append(" ")
+            if node.getElementsByTagName('ip'):
+                _ips = node.getElementsByTagName('ip')
+                for _ip in _ips:
+                    node_list.append(str(_ip.childNodes[0].nodeValue.strip()))
+            else:
+                node_list.append(" ")
+            if node.getElementsByTagName('ipSubnet'):
+                _ipSubnets = node.getElementsByTagName('ipSubnet')
+                for _ipSubnet in _ipSubnets:
+                    str(_ipSubnet.firstChild.data.strip())
+                    node_list.append(str(_ipSubnet.firstChild.data.strip()))
+            else:
+                node_list.append(" ")
+            result_list.append(';'.join(node_list))
+        with open(parse_file, 'w') as result_file:
+            result_file.truncate()
+            result_file.write(time)
+            for nod in result_list:
+                nod = nod.encode('cp1251')
+                result_file.write(nod + '\n')
+        return parse_file
 
-
-    def ParseIpXML(self):
-        '''
+    def parse_ip_xml(self, time, file_xml):
+        """
         Парсинг разпакованного файла dump.xml.
         Выбирает все IP адреса, удаляет дубликаты, сортирует
         и записывает в два текстовых файла:
         blockIP_HHHH-MM-DD_hh-mm.txt - отсортированный список уникальных IP
         blockiproute.txt - список маршрутов блокирования для роутера, ввида:
         ip route 10.0.0.1/32 Null0 254
-        '''
-        xml_file = unicode('dump.xml')
-        xml = parse(xml_file)
-        updateTime = xml.getElementsByTagName('reg:register')[0] \
-                                           .getAttribute('updateTime').strip()
-        parse_file = BLOCKIP_DIR + 'blockIP_' + updateTime[0:10] + '_' + \
-                            updateTime[11:13] + '-' + updateTime[14:16]+'.txt'
-        out_file = open(parse_file, 'w')
-        out_file.truncate()
-        ip_file = open(ROUTEIP_DIR + 'blockiproute.txt', 'w')
-        ip_file.truncate()
-        name = xml.getElementsByTagName('ip')
+        """
+        parse_file = BLOCKIP_DIR + 'blockIP_' + time[0:10] + '_' + \
+                     time[11:13] + '-' + time[14:16] + '.txt'
+        _ip = file_xml.getElementsByTagName('ip')
         list_ip = []
-        for node in name:
-            _ip = node.childNodes[0].nodeValue
-            # удаление дубликатов IP адресов     
-            if _ip in list_ip: 
-                pass
-            else:
-                list_ip.append(_ip)
+        for ip in _ip:
+            ip_adress = ip.childNodes[0].nodeValue
+            if not ip_adress in list_ip:
+                list_ip.append(ip_adress)
         list_ip.sort()
-        # запись списка в файлы
-        for i in xrange(len(list_ip)):
-            data = list_ip[i] + '\n'
-            iproute = "ip route " + list_ip[i] + "/32 Null0 254\n"
-            out_file.write(data) 
-            ip_file.write(iproute)
-        out_file.close()
-        ip_file.close()   
+        _ipSubnet = file_xml.getElementsByTagName('ipSubnet')
+        list_subnet = []
+        if _ipSubnet:
+            for subnet in _ipSubnet:
+                ipSubnet = subnet.childNodes[0].nodeValue
+                if not ipSubnet in list_subnet:
+                    list_subnet.append(ipSubnet)
+            list_subnet.sort()
+        with open(parse_file, 'w') as ip_file:
+            for ip in list_ip:
+                ip_file.write(ip + '\n')
+            for subnet in list_subnet:
+                ip_file.write(subnet + '\n')
+        with open(ROUTEIP_DIR + 'blockiproute.txt', 'w') as route_file:
+            route_file.truncate()
+            for ip in list_ip:
+                route_ip = "ip route " + ip + "/32 Null0 254\n"
+                route_file.write(route_ip)
+            for subnet in list_subnet:
+                route_subnet = "ip route " + subnet + " Null0 254\n"
+                route_file.write(route_subnet)
         return parse_file
-            
-
- 
-
-
-
-   
